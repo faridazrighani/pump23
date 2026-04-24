@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pump Selection Workbench — Refactored Baseline</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Refactored computational baseline</p>
+        <h1>Pump Selection Workbench</h1>
+        <p class="lede">
+          Baseline refactor with structured data model, suction/discharge separation, multi-segment hydraulic solver,
+          audit tables, NPSHA groundwork, and Tahap C pump-curve ingestion. This version is the technical foundation
+          for the next stages: final decision engine.
+        </p>
+      </div>
+      <aside class="hero-note">
+        <h2>Current implemented scope</h2>
+        <p><strong>Implemented now:</strong> refactored project structure, new case model, multi-segment hydraulic solver, system curve, suction/discharge audit, NPSHA, and pump-candidate curve engine.</p>
+        <p><strong>Current scope:</strong> operating point and Tahap E screening decision engine are active. Viscosity correction, speed change, and impeller trim remain the next development steps.</p>
+      </aside>
+    </header>
+
+    <main class="layout-grid">
+      <section class="panel control-panel">
+        <div class="panel-header">
+          <h2>Case Builder</h2>
+          <p>Build the new structured case model directly from fluid, suction, discharge, and pump-candidate data.</p>
+        </div>
+
+        <div class="field-group">
+          <div class="section-title-row">
+            <h3>Fluid and Duty</h3>
+            <span class="section-note">Shared fluid properties and design flow basis</span>
+          </div>
+          <div class="two-column">
+            <label>
+              <span>Fluid preset</span>
+              <select id="fluidPreset"></select>
+            </label>
+            <label>
+              <span>Material preset</span>
+              <select id="materialPreset"></select>
+            </label>
+          </div>
+          <div class="three-column">
+            <label>
+              <span>Flow basis</span>
+              <select id="flowBasis">
+                <option value="flowRate">Volumetric flow rate, Q</option>
+                <option value="massFlowRate">Mass flow rate, ṁ</option>
+              </select>
+            </label>
+            <label>
+              <span>Design flow rate, Q (m³/s)</span>
+              <input id="flowRate" type="number" min="0" step="any" />
+            </label>
+            <label>
+              <span>Mass flow rate, ṁ (kg/s)</span>
+              <input id="massFlowRate" type="number" min="0" step="any" />
+            </label>
+          </div>
+          <div class="three-column">
+            <label>
+              <span>Operating temperature, T (°C)</span>
+              <input id="temperature" type="number" step="any" />
+            </label>
+            <label>
+              <span>Vapor-pressure mode</span>
+              <select id="vaporPressureMode">
+                <option value="preset">Preset-locked</option>
+                <option value="manual">Manual override</option>
+              </select>
+            </label>
+            <label>
+              <span>Vapor pressure, Pv (Pa abs)</span>
+              <input id="vaporPressure" type="number" min="0" step="any" />
+            </label>
+          </div>
+          <div class="three-column">
+            <label>
+              <span>Density, ρ (kg/m³)</span>
+              <input id="density" type="number" min="0" step="any" />
+            </label>
+            <label>
+              <span>Dynamic viscosity, μ (Pa·s)</span>
+              <input id="viscosity" type="number" min="0" step="any" />
+            </label>
+            <div class="note-box">Preset mode enforces consistency between the selected fluid preset, its tabulated temperature, and vapor pressure. Use manual override only when project data provide Pv explicitly.</div>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <div class="section-title-row">
+            <h3>Suction Side</h3>
+            <span class="section-note">Source boundary, suction segments, and suction fittings</span>
+          </div>
+          <div class="three-column">
+            <label>
+              <span>Source type</span>
+              <select id="suctionSourceType">
+                <option value="open_tank">Open tank</option>
+                <option value="pressurized_vessel">Pressurized vessel</option>
+                <option value="line">Line suction</option>
+              </select>
+            </label>
+            <label>
+              <span>Source pressure, psrc (Pa abs)</span>
+              <input id="suctionPressureAbs" type="number" min="0" step="any" />
+            </label>
+            <label>
+              <span>Source elevation, zsrc (m)</span>
+              <input id="suctionElevation" type="number" step="any" />
+            </label>
+          </div>
+          <label>
+            <span>Pump centerline elevation, zpump (m)</span>
+            <input id="pumpElevation" type="number" step="any" />
+          </label>
+          <div class="subsection">
+            <div class="subsection-header">
+              <h4>Suction segments</h4>
+              <button id="addSuctionSegmentBtn" class="secondary-button" type="button">Add suction segment</button>
+            </div>
+            <div class="grid-header segments-grid-header">
+              <span>Name</span><span>D (m)</span><span>L (m)</span><span>ε (m)</span><span>Remove</span>
+            </div>
+            <div id="suctionSegments"></div>
+          </div>
+          <div class="subsection">
+            <div class="subsection-header">
+              <h4>Suction fittings</h4>
+              <button id="addSuctionFittingBtn" class="secondary-button" type="button">Add suction fitting</button>
+            </div>
+            <div class="grid-header fittings-grid-header">
+              <span>Fitting</span><span>Segment</span><span>Count</span><span>K each</span><span>Subtotal</span><span>Remove</span>
+            </div>
+            <div id="suctionFittings"></div>
+          </div>
+          <label>
+            <span>Additional suction ΣK allowance (-)</span>
+            <div class="inline-field-pair">
+              <input id="suctionAdditionalK" type="number" min="0" step="any" value="0" />
+              <select id="suctionAdditionalKSegment"></select>
+            </div>
+          </label>
+        </div>
+
+        <div class="field-group">
+          <div class="section-title-row">
+            <h3>Discharge Side</h3>
+            <span class="section-note">Destination boundary, discharge segments, and discharge fittings</span>
+          </div>
+          <div class="three-column">
+            <label>
+              <span>Destination type</span>
+              <select id="dischargeDestinationType">
+                <option value="open_tank">Open tank</option>
+                <option value="pressurized_vessel">Pressurized vessel</option>
+                <option value="line">Line discharge</option>
+              </select>
+            </label>
+            <label>
+              <span>Destination pressure, pdest (Pa abs)</span>
+              <input id="dischargePressureAbs" type="number" min="0" step="any" />
+            </label>
+            <label>
+              <span>Destination elevation, zdest (m)</span>
+              <input id="dischargeElevation" type="number" step="any" />
+            </label>
+          </div>
+          <div class="subsection">
+            <div class="subsection-header">
+              <h4>Discharge segments</h4>
+              <button id="addDischargeSegmentBtn" class="secondary-button" type="button">Add discharge segment</button>
+            </div>
+            <div class="grid-header segments-grid-header">
+              <span>Name</span><span>D (m)</span><span>L (m)</span><span>ε (m)</span><span>Remove</span>
+            </div>
+            <div id="dischargeSegments"></div>
+          </div>
+          <div class="subsection">
+            <div class="subsection-header">
+              <h4>Discharge fittings</h4>
+              <button id="addDischargeFittingBtn" class="secondary-button" type="button">Add discharge fitting</button>
+            </div>
+            <div class="grid-header fittings-grid-header">
+              <span>Fitting</span><span>Segment</span><span>Count</span><span>K each</span><span>Subtotal</span><span>Remove</span>
+            </div>
+            <div id="dischargeFittings"></div>
+          </div>
+          <label>
+            <span>Additional discharge ΣK allowance (-)</span>
+            <div class="inline-field-pair">
+              <input id="dischargeAdditionalK" type="number" min="0" step="any" value="0" />
+              <select id="dischargeAdditionalKSegment"></select>
+            </div>
+          </label>
+        </div>
+
+        <div class="field-group">
+          <div class="section-title-row">
+            <h3>Pump curve candidates</h3>
+            <span class="section-note">Tahap C active — vendor curves are ingested, normalized, and summarized at the current duty flow</span>
+          </div>
+          <label>
+            <span>Pump candidate JSON</span>
+            <textarea id="pumpCandidatesJson" rows="18" spellcheck="false"></textarea>
+          </label>
+        </div>
+
+        <div class="action-row">
+          <label class="compact-select">
+            <span>Sample case</span>
+            <select id="sampleCasePreset"></select>
+          </label>
+          <button id="loadSampleBtn" class="secondary-button" type="button">Load sample case</button>
+          <button id="exportCaseBtn" class="secondary-button" type="button">Export case JSON</button>
+          <button id="runBtn" class="primary-button" type="button">Run refactored solver</button>
+        </div>
+
+        <div id="messageBox" class="message-box" aria-live="polite"></div>
+      </section>
+
+      <section class="panel output-panel">
+        <div class="panel-header">
+          <h2>Results and Audit</h2>
+          <p>Stage A–B hydraulic and NPSHA baselines are active, Tahap C ingests pump curves, Tahap D solves operating points, and Tahap E now performs screening-level pump selection decisions.</p>
+        </div>
+        <div id="summaryCards" class="summary-grid"></div>
+        <div class="chart-card">
+          <div class="subsection-header"><h3>System curve</h3></div>
+          <svg id="systemCurveChart" viewBox="0 0 760 360" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <div class="table-card">
+          <div class="subsection-header"><h3>Pump-candidate summary, operating points, and Tahap E decisions</h3></div>
+          <div id="pumpCurveSummary"></div>
+        </div>
+        <div class="two-column-output">
+          <div class="chart-card">
+            <div class="subsection-header"><h3>Head–flow curves</h3></div>
+            <svg id="pumpHeadChart" viewBox="0 0 760 320" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+          <div class="chart-card">
+            <div class="subsection-header"><h3>Efficiency–flow curves</h3></div>
+            <svg id="pumpEfficiencyChart" viewBox="0 0 760 320" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </div>
+        <div class="two-column-output">
+          <div class="chart-card">
+            <div class="subsection-header"><h3>Power–flow curves</h3></div>
+            <svg id="pumpPowerChart" viewBox="0 0 760 320" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+          <div class="chart-card">
+            <div class="subsection-header"><h3>NPSHR–flow curves</h3></div>
+            <svg id="pumpNpshrChart" viewBox="0 0 760 320" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </div>
+        <div class="two-column-output">
+          <div class="table-card">
+            <div class="subsection-header"><h3>Suction audit</h3></div>
+            <div id="suctionAuditTable"></div>
+          </div>
+          <div class="table-card">
+            <div class="subsection-header"><h3>Discharge audit</h3></div>
+            <div id="dischargeAuditTable"></div>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="subsection-header">
+            <h3>System curve data</h3>
+            <button id="toggleSystemCurveTableBtn" class="secondary-button compact-toggle" type="button" aria-expanded="false" aria-controls="systemCurveTablePanel">Show table</button>
+          </div>
+          <div id="systemCurveTablePanel" class="collapsible-panel is-collapsed">
+            <div id="systemCurveTable"></div>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="subsection-header"><h3>Case model snapshot</h3></div>
+          <pre id="caseModelSnapshot" class="json-view"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
